@@ -1,5 +1,10 @@
+const { createWriteStream } = require(`fs`)
+const { extname, resolve } = require(`path`)
+
+const axios = require(`axios`)
 const _ = require(`lodash`)
 const fs = require(`fs-extra`)
+const { traceSVG } = require(`gatsby-plugin-sharp`)
 
 const normalize = require(`./normalize`)
 const fetchData = require(`./fetch`)
@@ -88,6 +93,47 @@ exports.sourceNodes = async (
   console.log(`Updated assets `, currentSyncData.assets.length)
   console.log(`Deleted assets `, currentSyncData.deletedAssets.length)
   console.timeEnd(`Fetch Contentful data`)
+
+  const assetFiles = []
+  for (const asset of assets) {
+    console.log(`Processing: ${asset.sys.id}`)
+    const { file: locales } = asset.fields
+    const localisedAssets = Object.keys(locales).map(async locale => {
+      const file = locales[locale]
+      const response = await axios({
+        method: `get`,
+        url: `http:${file.url}`,
+        responseType: `stream`,
+      })
+
+      const extension = extname(file.url)
+      const id = `${asset.sys.id}-${locale}`
+      const absolutePath = resolve(__dirname, `${id}${extension}`)
+
+      response.data.pipe(createWriteStream(absolutePath))
+
+      return {
+        id,
+        name: id,
+        absolutePath,
+        extension,
+        internal: { contentDigest: id },
+      }
+    })
+
+    const files = await Promise.all(localisedAssets)
+    assetFiles.push(...files)
+  }
+
+  console.log(`Done with downloading ${assetFiles.length} assets.`)
+
+  for (const file of assetFiles) {
+    const args = {}
+    const fileArgs = {}
+    const reporter = console
+    const result = await traceSVG({ file, args, fileArgs, reporter })
+    console.log(`${file.id} traced: \n ${result}`)
+  }
 
   // Update syncToken
   const nextSyncToken = currentSyncData.nextSyncToken
