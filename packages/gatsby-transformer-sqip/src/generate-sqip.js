@@ -18,6 +18,7 @@ module.exports = async function generateSqip(options) {
     blur,
     mode,
     cacheDir,
+    contentDigest,
   } = options
 
   const { name } = parse(absolutePath)
@@ -33,27 +34,33 @@ module.exports = async function generateSqip(options) {
     .update(JSON.stringify(sqipOptions))
     .digest(`hex`)
 
-  const cacheKey = `sqip-${name}-${optionsHash}`
-  const cachePath = resolve(cacheDir, `${name}-${optionsHash}.svg`)
+  const cacheKey = `${contentDigest}-${optionsHash}`
+  const cachePath = resolve(cacheDir, `${contentDigest}-${optionsHash}.svg`)
 
-  debug(`Request preview generation for ${name}-${optionsHash}`)
+  debug(
+    `Request preview generation for ${name} (${contentDigest}-${optionsHash})`
+  )
 
   return queue.add(async () => {
     let primitiveData = await cache.get(cacheKey)
 
-    debug(`Executing preview generation request for ${name}-${optionsHash}`)
+    debug(
+      `Executing preview generation request for ${name} (${contentDigest}-${optionsHash})`
+    )
 
     if (!primitiveData) {
       let svg
 
       if (await exists(cachePath)) {
         debug(
-          `Primitive result file already exists for ${name}-${optionsHash} (${cachePath})`
+          `Primitive result file already exists for ${name} (${contentDigest}-${optionsHash})`
         )
         const svgBuffer = await readFile(cachePath)
         svg = svgBuffer.toString()
       } else {
-        debug(`Generate primitive result file of ${name}-${optionsHash}`)
+        debug(
+          `Generate primitive result file of ${name} (${contentDigest}-${optionsHash})`
+        )
 
         const result = await new Promise((resolve, reject) => {
           try {
@@ -70,7 +77,9 @@ module.exports = async function generateSqip(options) {
         svg = result.final_svg
 
         await writeFile(cachePath, svg)
-        debug(`Wrote primitive result file to disk for ${name}-${optionsHash}`)
+        debug(
+          `Wrote primitive result file to disk for ${name} (${contentDigest}-${optionsHash})`
+        )
       }
 
       primitiveData = {
