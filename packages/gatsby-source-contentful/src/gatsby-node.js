@@ -119,6 +119,8 @@ exports.sourceNodes = async (
     parentSpan,
   })
 
+  console.time(`ctf data processing`)
+
   createTypes(`
   interface ContentfulEntry @nodeInterface {
     contentful_id: String!
@@ -199,7 +201,9 @@ exports.sourceNodes = async (
   )
 
   // Store a raw and unresolved copy of the data for caching
+  console.time(`clone deep current sync`)
   const currentSyncDataRaw = _.cloneDeep(currentSyncData)
+  console.timeEnd(`clone deep current sync`)
 
   // Use the JS-SDK to resolve the entries and assets
   const res = createClient({
@@ -216,6 +220,7 @@ exports.sourceNodes = async (
   currentSyncData.entries = res.items
 
   // Inject raw API output to rich text fields
+  console.time(`rich text field raw value injection`)
   const richTextFields = contentTypeItems.reduce((fields, contentType) => {
     return {
       ...fields,
@@ -239,6 +244,8 @@ exports.sourceNodes = async (
       }
     })
   })
+
+  console.timeEnd(`rich text field raw value injection`)
 
   const entryList = normalize.buildEntryList({
     currentSyncData,
@@ -298,6 +305,10 @@ exports.sourceNodes = async (
     cache.set(CACHE_SYNC_KEY, currentSyncDataRaw),
     cache.set(CACHE_SYNC_TOKEN, nextSyncToken),
   ])
+
+  console.timeEnd(`ctf data processing`)
+
+  console.time(`ctf node creation`)
 
   reporter.verbose(`Building Contentful reference map`)
 
@@ -416,6 +427,8 @@ exports.sourceNodes = async (
   }
 
   creationActivity.end()
+
+  console.timeEnd(`ctf node creation`)
 
   if (pluginConfig.get(`downloadLocal`)) {
     reporter.info(`Download Contentful asset files`)

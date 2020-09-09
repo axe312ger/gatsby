@@ -564,6 +564,8 @@ exports.extendNodeType = ({ type, store, cache }) => {
 
           const rawReferences = { Entry: new Set(), Asset: new Set() }
 
+          console.time(`${source.id} rich text reference lookup total`)
+
           // Locate all Contentful Links within the rich text data
           const traverse = obj => {
             for (let k in obj) {
@@ -576,11 +578,18 @@ exports.extendNodeType = ({ type, store, cache }) => {
             }
           }
 
+          console.time(`${source.id} rich text reference traverse`)
+
           traverse(JSON.parse(source.raw))
 
+          console.timeEnd(`${source.id} rich text reference traverse`)
+
           if (!rawReferences.Entry.size && !rawReferences.Asset.size) {
+            console.timeEnd(`${source.id} rich text reference lookup`)
             return []
           }
+
+          console.time(`${source.id} rich text reference resolving`)
 
           const rawEntries = Array.from(rawReferences.Entry)
           const rawAssets = Array.from(rawReferences.Asset)
@@ -603,8 +612,10 @@ exports.extendNodeType = ({ type, store, cache }) => {
             },
             type: `ContentfulAsset`,
           })
+          console.timeEnd(`${source.id} rich text reference resolving`)
 
           // Localize results
+          console.time(`${source.id} rich text reference localization`)
           const nodeLocale = parent.node_locale
 
           const findForLocaleWithFallback = (nodeList = [], referenceId) =>
@@ -621,8 +632,15 @@ exports.extendNodeType = ({ type, store, cache }) => {
           const localizedAssetReferences = rawAssets.map(referenceId =>
             findForLocaleWithFallback(resultAssets, referenceId)
           )
+          console.timeEnd(`${source.id} rich text reference localization`)
 
-          return [...localizedEntryReferences, ...localizedAssetReferences]
+          const result = [
+            ...localizedEntryReferences,
+            ...localizedAssetReferences,
+          ]
+
+          console.timeEnd(`${source.id} rich text reference lookup total`)
+          return result
         },
       },
     }
