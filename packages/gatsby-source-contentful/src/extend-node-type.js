@@ -546,7 +546,7 @@ const fluidNodeType = ({ name, getTracedSVG }) => {
   }
 }
 
-exports.extendNodeType = ({ type, store, cache }) => {
+exports.extendNodeType = ({ type, store, cache, getNodesByType }) => {
   if (type.name.match(/contentful.*RichTextNode/)) {
     return {
       nodeType: {
@@ -595,52 +595,34 @@ exports.extendNodeType = ({ type, store, cache }) => {
           const rawAssets = Array.from(rawReferences.Asset)
 
           // Query for referenced nodes
-          const resultEntries = await context.nodeModel.runQuery({
-            query: {
-              filter: {
-                contentful_id: { in: rawEntries },
-              },
-            },
-            type: `ContentfulEntry`,
+          const nodeLocale = parent.node_locale
+          const references = []
+
+          getNodesByType.get(`ContentfulEntry`).forEach(node => {
+            if (
+              node.node_locale === nodeLocale &&
+              rawEntries.includes(node.contentful_id)
+            ) {
+              references.push(node)
+            }
           })
 
-          const resultAssets = await context.nodeModel.runQuery({
-            query: {
-              filter: {
-                contentful_id: { in: rawAssets },
-              },
-            },
-            type: `ContentfulAsset`,
+          getNodesByType.get(`ContentfulAsset`).forEach(node => {
+            if (
+              node.node_locale === nodeLocale &&
+              rawAssets.includes(node.contentful_id)
+            ) {
+              references.push(node)
+            }
           })
+
           console.timeEnd(`${source.id} rich text reference resolving`)
 
           // Localize results
           console.time(`${source.id} rich text reference localization`)
-          const nodeLocale = parent.node_locale
-
-          const findForLocaleWithFallback = (nodeList = [], referenceId) =>
-            nodeList.find(
-              result =>
-                result.contentful_id === referenceId &&
-                result.node_locale === nodeLocale
-            )
-
-          const localizedEntryReferences = rawEntries.map(referenceId =>
-            findForLocaleWithFallback(resultEntries, referenceId)
-          )
-
-          const localizedAssetReferences = rawAssets.map(referenceId =>
-            findForLocaleWithFallback(resultAssets, referenceId)
-          )
           console.timeEnd(`${source.id} rich text reference localization`)
-
-          const result = [
-            ...localizedEntryReferences,
-            ...localizedAssetReferences,
-          ]
-
           console.timeEnd(`${source.id} rich text reference lookup total`)
-          return result
+          return references
         },
       },
     }
