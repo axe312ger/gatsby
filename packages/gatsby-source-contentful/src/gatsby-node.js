@@ -108,6 +108,36 @@ exports.sourceNodes = async (
     previousSyncData = cachedData
   }
 
+  const fetchActivity = reporter.activityTimer(
+    `Contentful: Fetch data (${sourceId})`,
+    {
+      parentSpan,
+    }
+  )
+  fetchActivity.start()
+
+  let {
+    currentSyncData,
+    contentTypeItems,
+    defaultLocale,
+    locales,
+    space,
+  } = await fetchData({
+    syncToken,
+    reporter,
+    pluginConfig,
+    parentSpan,
+  })
+
+  fetchActivity.end()
+  const processingActivity = reporter.activityTimer(
+    `Contentful: Proccess data (${sourceId})`,
+    {
+      parentSpan,
+    }
+  )
+  processingActivity.start()
+
   createTypes(`
   interface ContentfulEntry @nodeInterface {
     contentful_id: String!
@@ -144,36 +174,6 @@ exports.sourceNodes = async (
     })
   )
   createTypes(gqlTypes)
-
-  const fetchActivity = reporter.activityTimer(
-    `Contentful: Fetch data (${sourceId})`,
-    {
-      parentSpan,
-    }
-  )
-  fetchActivity.start()
-
-  let {
-    currentSyncData,
-    contentTypeItems,
-    defaultLocale,
-    locales,
-    space,
-  } = await fetchData({
-    syncToken,
-    reporter,
-    pluginConfig,
-    parentSpan,
-  })
-  fetchActivity.end()
-
-  const processingActivity = reporter.activityTimer(
-    `Contentful: Proccess data (${sourceId})`,
-    {
-      parentSpan,
-    }
-  )
-  processingActivity.start()
 
   // Create a map of up to date entries and assets
   function mergeSyncData(previous, current, deleted) {
