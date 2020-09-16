@@ -113,9 +113,9 @@ const makeMakeId = ({ currentLocale, defaultLocale, createNodeId }) => (
   type
 ) => createNodeId(makeId({ spaceId, id, currentLocale, defaultLocale, type }))
 
-exports.buildEntryList = ({ contentTypeItems, currentSyncData }) =>
+exports.buildEntryList = ({ contentTypeItems, mergedSyncData }) =>
   contentTypeItems.map(contentType =>
-    currentSyncData.entries.filter(
+    mergedSyncData.entries.filter(
       entry => entry.sys.contentType.sys.id === contentType.sys.id
     )
   )
