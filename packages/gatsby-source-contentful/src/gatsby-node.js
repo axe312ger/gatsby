@@ -51,7 +51,7 @@ exports.sourceNodes = async (
   },
   pluginOptions
 ) => {
-  const { createNode, deleteNode, touchNode } = actions
+  const { createNode, deleteNode, touchNode, createTypes } = actions
   const online = await isOnline()
 
   // If the user knows they are offline, serve them cached result
@@ -128,8 +128,8 @@ exports.sourceNodes = async (
     pluginConfig,
     parentSpan,
   })
-  fetchActivity.end()
 
+  fetchActivity.end()
   const processingActivity = reporter.activityTimer(
     `Contentful: Proccess data (${sourceId})`,
     {
@@ -137,6 +137,43 @@ exports.sourceNodes = async (
     }
   )
   processingActivity.start()
+
+  createTypes(`
+  interface ContentfulEntry @nodeInterface {
+    contentful_id: String!
+    id: ID!
+  }
+`)
+
+  createTypes(`
+  interface ContentfulReference {
+    contentful_id: String!
+    id: ID!
+  }
+`)
+
+  createTypes(
+    schema.buildObjectType({
+      name: `ContentfulAsset`,
+      fields: {
+        contentful_id: { type: `String!` },
+        id: { type: `ID!` },
+      },
+      interfaces: [`ContentfulReference`, `Node`],
+    })
+  )
+
+  const gqlTypes = contentTypeItems.map(contentTypeItem =>
+    schema.buildObjectType({
+      name: _.upperFirst(_.camelCase(`Contentful ${contentTypeItem.name}`)),
+      fields: {
+        contentful_id: { type: `String!` },
+        id: { type: `ID!` },
+      },
+      interfaces: [`ContentfulReference`, `ContentfulEntry`, `Node`],
+    })
+  )
+  createTypes(gqlTypes)
 
   // Create a map of up to date entries and assets
   function mergeSyncData(previous, current, deleted) {
@@ -179,6 +216,31 @@ exports.sourceNodes = async (
   })
 
   mergedSyncData.entries = res.items
+
+  // Inject raw API output to rich text fields
+  const richTextFields = contentTypeItems.reduce((fields, contentType) => {
+    return {
+      ...fields,
+      [contentType.sys.id]: contentType.fields
+        .filter(field => field.type === `RichText`)
+        .map(field => field.id),
+    }
+  }, {})
+
+  mergedSyncDataRaw.entries.forEach(entry => {
+    richTextFields[entry.sys.contentType.sys.id].forEach(richTextFieldId => {
+      if (entry.fields[richTextFieldId]) {
+        Object.keys(entry.fields[richTextFieldId]).map(locale => {
+          const rawEntry = mergedSyncDataRaw.entries.find(
+            rawEntry => entry.sys.id === rawEntry.sys.id
+          )
+          const rawValue = rawEntry.fields[richTextFieldId][locale]
+
+          entry.fields[richTextFieldId][locale].raw = rawValue
+        })
+      }
+    })
+  })
 
   const entryList = normalize.buildEntryList({
     mergedSyncData,
@@ -336,7 +398,6 @@ exports.sourceNodes = async (
         locales,
         space,
         useNameForId: pluginConfig.get(`useNameForId`),
-        richTextOptions: pluginConfig.get(`richText`),
       })
     )
   }

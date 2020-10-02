@@ -9,7 +9,6 @@ const {
   GraphQLString,
   GraphQLInt,
   GraphQLFloat,
-  GraphQLJSON,
   GraphQLNonNull,
 } = require(`gatsby/graphql`)
 const qs = require(`qs`)
@@ -547,18 +546,68 @@ const fluidNodeType = ({ name, getTracedSVG }) => {
   }
 }
 
-exports.extendNodeType = ({ type, store }) => {
+exports.extendNodeType = ({ type, store, cache, getNodesByType }) => {
   if (type.name.match(/contentful.*RichTextNode/)) {
     return {
       nodeType: {
         type: GraphQLString,
-        deprecationReason: `This field is deprecated, please use 'json' instead.`,
+        deprecationReason: `This field is deprecated, please use 'raw' instead. @todo add link to migration steps.`,
       },
       json: {
-        type: GraphQLJSON,
-        resolve: (source, fieldArgs) => {
-          const contentJSON = JSON.parse(source.internal.content)
-          return contentJSON
+        type: GraphQLString,
+        deprecationReason: `This field is deprecated, please use 'raw' instead. @todo add link to migration steps.`,
+      },
+      references: {
+        type: [`ContentfulReference`],
+        async resolve(source, args, context, info) {
+          const parent = await context.nodeModel.findRootNodeAncestor(source)
+
+          const rawReferences = { Entry: new Set(), Asset: new Set() }
+
+          // Locate all Contentful Links within the rich text data
+          const traverse = obj => {
+            for (let k in obj) {
+              const value = obj[k]
+              if (value && value.sys && value.sys.type === `Link`) {
+                rawReferences[value.sys.linkType].add(value.sys.contentful_id)
+              } else if (value && typeof value === `object`) {
+                traverse(value)
+              }
+            }
+          }
+
+          traverse(JSON.parse(source.raw))
+
+          if (!rawReferences.Entry.size && !rawReferences.Asset.size) {
+            return []
+          }
+
+          const rawEntries = Array.from(rawReferences.Entry)
+          const rawAssets = Array.from(rawReferences.Asset)
+
+          // Query for referenced nodes
+          const nodeLocale = parent.node_locale
+          const references = []
+
+          getNodesByType.get(`ContentfulEntry`).forEach(node => {
+            if (
+              node.node_locale === nodeLocale &&
+              rawEntries.includes(node.contentful_id)
+            ) {
+              references.push(node)
+            }
+          })
+
+          getNodesByType.get(`ContentfulAsset`).forEach(node => {
+            if (
+              node.node_locale === nodeLocale &&
+              rawAssets.includes(node.contentful_id)
+            ) {
+              references.push(node)
+            }
+          })
+
+          return references
         },
       },
     }
